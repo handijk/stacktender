@@ -197,6 +197,8 @@ async function main() {
         cfg.backups.repository.startsWith('/') || /^[a-z0-9]+:/.test(cfg.backups.repository)
             ? cfg.backups.repository
             : path.resolve(stackDir, cfg.backups.repository);
+    // A local repository directory is made as this user before Docker would make it root-owned.
+    if (repository.startsWith('/')) fs.mkdirSync(repository, {recursive: true});
     await ensureRunner({
         stackDir,
         jobsHostDir: path.join(dataDir, 'backups'),
