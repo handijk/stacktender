@@ -183,24 +183,59 @@ the release notes; a script that greps a changelog for "breaking" is a valid one
 
 ## Install
 
+stacktender runs as a container next to the stack, with the Docker socket, the stack directory
+mounted at its own host path (so compose resolves the relative bind mounts) and a data directory:
+
 ```yaml
 services:
   stacktender:
     image: ghcr.io/handijk/stacktender:0.1.0
     restart: unless-stopped
+    user: '1000:1000' # the owner of the stack directory
+    group_add: ['999'] # the group of /var/run/docker.sock
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
-      - .:/stack # the repository
-      - ./stacktender-data:/data # journal, reports, history
+      - /home/me/stack:/home/me/stack # the stack directory, at its own path
       - /var/lib/update-notifier:/host/update-notifier:ro # optional: the host's patch summary
+      - /var/lib/apt/periodic:/host/apt-periodic:ro
+      - /lib/modules:/host/modules:ro
+    working_dir: /home/me/stack
     environment:
       - STACKTENDER_WEBHOOK=https://ntfy.sh/your-topic
+    ports:
+      - '127.0.0.1:8800:8800'
 ```
 
-The first run makes the directory a git repository if it is none, writes a default
-`stacktender.yaml` next to the compose file, installs the deploy hook on its checkout, and does a
-scan. With `autopilot: false` (the default for a new stack) it only reports; set it to `true` per
-service or for all once the reports look right.
+The first run makes the directory a git repository if it is none, with the data directories
+ignored, writes a default `stacktender.yaml` next to the compose file, starts the restic runner
+container, and scans. With `autopilot: false` (the default for a new stack) it only reports; set
+it to `true` once the reports look right. The data directory is `./stacktender-data` by default
+(`--data` or `STACKTENDER_DATA` for another place); the restic repository is
+`../stacktender-backups` (`backups.repository`, any restic repository URL works).
+
+Without a container: `npx stacktender --stack /home/me/stack` on a machine with git and the
+docker CLI.
+
+### The API
+
+On `localhost:8800`, JSON, no authentication (bind it to localhost or put it behind something
+that has one):
+
+| route                             | what                                                                                        |
+| --------------------------------- | ------------------------------------------------------------------------------------------- |
+| `GET /status`                     | the engines' status, the last scan and deploy, the signals                                  |
+| `GET /updates?only=need_decision` | the findings with their policy and state, and the history                                   |
+| `POST /updates/<id>/apply`        | try one now (`{"in_window": true}` queues it for its own time)                              |
+| `POST /updates/<id>/dismiss`      | `{"days": 30, "reason": "..."}`                                                             |
+| `POST /updates/<id>/undo`         | take an applied update back; `GET /updates/undoable` lists them                             |
+| `POST /scan`                      | scan now                                                                                    |
+| `GET /backups`, `/backups/sets`   | the sets, the runs, the last night                                                          |
+| `GET /backups/snapshots?set=…`    | the snapshots                                                                               |
+| `POST /backups/now`               | a backup now (`{"set": "…"}` for one)                                                       |
+| `POST /backups/restore`           | `{"set": "…", "snapshot": "<id>"}`                                                          |
+| `POST /deploy`                    | `{"old": "<sha>", "new": "<sha>"}`: a deploy, for the git hook of a push by hand            |
+| `POST /maintenance`               | `{"source": "…", "active": true}`: another tool's planned work, which stacktender waits for |
+| `GET /events`                     | the last events                                                                             |
 
 ## Configuration
 
@@ -238,7 +273,9 @@ backups:
   noStop: [mosquitto]
   data: [.env]
 host:
-  report: true
+  report: true # needs the /host mounts above
+scanner:
+  image: renovate/renovate:44
 deploy:
   test: 'docker compose run --rm tests' # optional gate
   # command: ./scripts/deploy.sh             # bring your own instead of the shipped one
