@@ -285,4 +285,86 @@ describe('a deploy against fakes', () => {
         assert.ok(dockerCalls.includes('compose up -d app'), dockerCalls.join('\n'));
         assert.deepEqual(docker.started, ['app'], 'what the copy stopped runs again');
     });
+
+    test('its own definition changed: recreated after the answer, by a helper container', async () => {
+        const stackDir = tempDir('deploy-stack-self');
+        const dataDir = tempDir('deploy-data-self');
+        const composeOld =
+            'services:\n  stacktender:\n    image: ghcr.io/x/stacktender:1\n  web:\n    image: nginx:1\n';
+        const composeNew = composeOld.replace('stacktender:1', 'stacktender:2');
+        fs.writeFileSync(path.join(stackDir, 'docker-compose.yaml'), composeNew);
+        const docker = {
+            async container(name) {
+                return name === 'stacktender'
+                    ? {running: true, image: 'ghcr.io/x/stacktender:1', imageId: 'sha256:one', restartCount: 0}
+                    : null;
+            },
+            async containers() {
+                return new Map();
+            },
+            async start() {},
+        };
+        const backups = {
+            setsInfo() {
+                return {sets: [], by_service: {}, ready: true};
+            },
+        };
+        const repo = {
+            async read() {
+                return composeNew;
+            },
+            async subject() {
+                return 'stacktender 2';
+            },
+            async exists() {
+                return false;
+            },
+            async isAncestor() {
+                return false;
+            },
+            async changedFiles() {
+                return ['docker-compose.yaml'];
+            },
+            async show() {
+                return composeOld;
+            },
+        };
+        const dockerCalls = [];
+        const run = async (args) => {
+            dockerCalls.push(args.join(' '));
+            if (args[0] === 'compose' && args.includes('config') && args.includes('--format')) {
+                const text = args.includes('-f') ? composeOld : composeNew;
+                const services = {};
+                for (const m of text.matchAll(/^ {2}(\w+):\n {4}image: (.*)\n/gm)) services[m[1]] = {image: m[2]};
+                return {code: 0, output: JSON.stringify({name: 'stack', services})};
+            }
+            return {code: 0, output: ''};
+        };
+        const deploy = new Deploy({
+            stackDir,
+            dataDir,
+            repo,
+            backups,
+            docker,
+            bus: fakeBus(),
+            cfg: {selfService: 'stacktender', reload: []},
+            run,
+            socketPath: '/run/docker.sock',
+        });
+        deploy.selfRecreateDelayMs = 10;
+        const result = await deploy.deploy('aaaaaaaa', 'bbbbbbbb');
+        assert.equal(result.ok, true, result.output);
+        assert.match(result.output, /recreated once this deploy has answered/);
+        assert.ok(dockerCalls.includes('compose up -d web'), 'everything but itself, right away');
+        assert.ok(!dockerCalls.some((c) => c.includes('--no-deps')), 'not itself before the answer');
+        await new Promise((res) => setTimeout(res, 60));
+        const helper = dockerCalls.find((c) => c.startsWith('run -d --rm --name stacktender-recreate-'));
+        assert.ok(helper, dockerCalls.join('\n'));
+        assert.ok(
+            helper.endsWith(
+                `-v /run/docker.sock:/var/run/docker.sock -v ${stackDir}:${stackDir} -w ${stackDir} --entrypoint docker ghcr.io/x/stacktender:1 compose up -d --no-deps stacktender`,
+            ),
+            helper,
+        );
+    });
 });

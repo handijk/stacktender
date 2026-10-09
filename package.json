@@ -1,6 +1,6 @@
 {
   "name": "stacktender",
-  "version": "0.0.9",
+  "version": "0.0.10",
   "description": "Keeps a Docker Compose stack current without breaking it: updates with verification and rollback, and the copy from before every change",
   "type": "module",
   "main": "index.js",

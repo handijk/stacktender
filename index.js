@@ -92,6 +92,7 @@ deploy = new Deploy({
     docker,
     bus: bus.forSource('deploy'),
     cfg: {...cfg.deploy, selfService: cfg.selfService, tz: cfg.tz},
+    socketPath: dockerSocket.socketPath,
     log,
 });
 

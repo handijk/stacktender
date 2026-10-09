@@ -237,7 +237,10 @@ curl -s --max-time 3600 -X POST http://127.0.0.1:8800/deploy -H 'Content-Type: a
 ```
 
 stacktender's own definition in the compose file is never recreated in the middle of a deploy: it
-brings up everything else, answers, and recreates itself a moment later.
+brings up everything else, answers, and a moment later starts a helper container (its own image's
+docker CLI, with the socket and the stack directory mounted) that recreates it; a compose started
+inside the container it recreates would die with it half way. The socket must sit at the same path
+on the host as in the container (`/var/run/docker.sock`, as in the install above).
 
 ### The API
 
