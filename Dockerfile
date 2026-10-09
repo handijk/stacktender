@@ -1,4 +1,5 @@
-FROM node:22-alpine
+# the official node image from the Docker-maintained mirror on ECR Public: no pull limit for the build
+FROM public.ecr.aws/docker/library/node:22-alpine
 
 # git for the repository, the docker CLI with compose for the deploy and the runners
 RUN apk add --no-cache git docker-cli docker-cli-compose
