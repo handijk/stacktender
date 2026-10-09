@@ -39,7 +39,9 @@ const port = Number(arg('port', 8800));
 const host = arg('host', '127.0.0.1');
 const log = (msg) => console.log(`${new Date().toISOString()} ${msg}`);
 
-fs.mkdirSync(dataDir, {recursive: true});
+// Every directory a runner mounts is made as this user first: Docker would make it root-owned.
+for (const d of ['backups/jobs', 'backups/cache', 'scan', 'updates', 'state'])
+    fs.mkdirSync(path.join(dataDir, d), {recursive: true});
 
 // The configuration, written with the defaults when there is none.
 const configFile = path.join(stackDir, 'stacktender.yaml');
