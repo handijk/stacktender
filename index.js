@@ -201,16 +201,19 @@ async function main() {
         cfg.backups.repository.startsWith('/') || /^[a-z0-9]+:/.test(cfg.backups.repository)
             ? cfg.backups.repository
             : path.resolve(stackDir, cfg.backups.repository);
-    // A local repository directory is made as this user before Docker would make it root-owned.
-    if (repository.startsWith('/')) fs.mkdirSync(repository, {recursive: true});
+    // A missing local repository directory is made before Docker would make it root-owned; one that is not
+    // visible from here (outside the mounts) or not ours is left to the runner, which runs as root.
+    try {
+        if (repository.startsWith('/') && !fs.existsSync(repository)) fs.mkdirSync(repository, {recursive: true});
+    } catch (err) {
+        log(`restic repository directory ${repository}: ${err.message}; left to the runner`);
+    }
     await ensureRunner({
         stackDir,
         jobsHostDir: path.join(dataDir, 'backups'),
         repository,
         image: cfg.backups.image,
-        user:
-            cfg.backups.user ??
-            (typeof process.getuid === 'function' ? `${process.getuid()}:${process.getgid()}` : undefined),
+        user: cfg.backups.user ?? undefined, // root unless told otherwise: the data belongs to the services' own users
         tz: cfg.tz,
         log,
     }).catch((err) => log(`restic runner: ${err.message}`));
