@@ -19,6 +19,7 @@ import {Backups} from './lib/backups/engine.js';
 import {ensureRunner} from './lib/backups/runner.js';
 import {Updates} from './lib/updates/engine.js';
 import {Bus} from './lib/bus.js';
+import {MqttPublisher} from './lib/mqtt.js';
 import {Deploy, composeFile, composeProjectName, dataDirs} from './lib/deploy.js';
 import {createApi} from './lib/api.js';
 import {RenovateScanner} from './lib/scanner.js';
@@ -56,7 +57,8 @@ const cfg = mergeConfig(parseYaml(fs.readFileSync(configFile, 'utf-8')) ?? {});
 if (process.env.STACKTENDER_WEBHOOK)
     cfg.notify.webhooks = [...(cfg.notify.webhooks ?? []), process.env.STACKTENDER_WEBHOOK];
 
-const bus = new Bus({webhooks: cfg.notify.webhooks, log});
+const publisher = cfg.notify.mqtt?.url ? new MqttPublisher({...cfg.notify.mqtt, log}) : null;
+const bus = new Bus({webhooks: cfg.notify.webhooks, publisher, log});
 // The compose project of the stack, from compose itself: the containers of another project with the
 // same service names on the machine are never ours.
 const dockerSocket = new DockerSocket();
@@ -221,6 +223,7 @@ for (const sig of ['SIGINT', 'SIGTERM']) {
         log(`${sig}: stopping`);
         updates.stop();
         backups.stop();
+        publisher?.close().catch(() => undefined);
         api.close().then(() => process.exit(0));
         setTimeout(() => process.exit(0), 3000).unref();
     });

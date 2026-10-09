@@ -108,6 +108,8 @@ describe('a deploy against fakes', () => {
         const dockerCalls = [];
         const run = async (args) => {
             dockerCalls.push(args.join(' '));
+            if (args[0] === 'compose' && args.includes('config') && args.includes('--services'))
+                return {code: 0, output: 'app\ndb\nstacktender\n'};
             if (args[0] === 'compose' && args.includes('config') && args.includes('--format')) {
                 const text = args.includes('-f') ? composeOld : composeNew;
                 const services = {};
@@ -148,7 +150,11 @@ describe('a deploy against fakes', () => {
             [{services: ['db'], tag: 'deploy:bbbbbbbb', start: false}],
             'the copy before the image change',
         );
-        assert.ok(dockerCalls.includes('compose up -d'), 'everything, since the compose file changed');
+        assert.ok(
+            dockerCalls.includes('compose up -d app db'),
+            `everything but stacktender itself, since the compose file changed: ${dockerCalls.filter((c) => c.startsWith('compose up'))}`,
+        );
+        assert.ok(!result.output.includes('recreated once'), "stacktender's own definition did not change");
         assert.deepEqual(docker.started, ['db'], 'what the copy stopped runs again');
         assert.equal(fs.readFileSync(path.join(dataDir, 'last-deployed-sha'), 'utf-8'), 'bbbbbbbb');
         assert.ok(fs.existsSync(path.join(stackDir, 'db-data')), 'the data directory was created as us');

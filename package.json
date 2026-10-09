@@ -1,6 +1,6 @@
 {
   "name": "stacktender",
-  "version": "0.0.1",
+  "version": "0.0.5",
   "description": "Keeps a Docker Compose stack current without breaking it: updates with verification and rollback, and the copy from before every change",
   "type": "module",
   "main": "index.js",
@@ -42,6 +42,7 @@
   },
   "homepage": "https://github.com/handijk/stacktender",
   "dependencies": {
+    "mqtt": "^5.16.0",
     "yaml": "^2.8.0"
   },
   "devDependencies": {

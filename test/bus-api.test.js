@@ -36,8 +36,15 @@ describe('bus', () => {
 
     test('events reach the hooks and the log; signals of other sources count as work', async () => {
         const sent = [];
+        const published = [];
+        const publisher = {
+            maintenance: async (source, active, info) => published.push(['maintenance', source, active, info.what]),
+            event: async (e) => published.push(['event', e.type]),
+            state: async (source) => published.push(['state', source]),
+        };
         const bus = new Bus({
             webhooks: ['https://example.org/hook'],
+            publisher,
             fetch: async (url, init) => (sent.push({url, body: init.body}), {ok: true}),
         });
         const updates = bus.forSource('updates');
@@ -52,6 +59,14 @@ describe('bus', () => {
         assert.deepEqual(updates.otherWork(), []);
         await bus.maintenance('deploy', true, {since: new Date(Date.now() - 31 * 60_000).toISOString()});
         assert.deepEqual(updates.otherWork(), [], 'a signal without an end goes stale after 30 minutes');
+        await updates.state({items: []});
+        assert.deepEqual(published, [
+            ['event', 'applied'],
+            ['maintenance', 'backups', true, 'nightly'],
+            ['maintenance', 'backups', false, undefined],
+            ['maintenance', 'deploy', true, undefined],
+            ['state', 'updates'],
+        ]);
     });
 });
 

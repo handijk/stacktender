@@ -15,3 +15,6 @@
 - The HTTP API, webhooks (JSON, ntfy, Discord, Slack), the maintenance signal between the parts,
   the hooks (`assessor`, `veto`), the host report.
 - The first run makes the stack directory a git repository with its data directories ignored.
+- MQTT (optional): the maintenance signal per source retained, events and state published.
+- `backups.host` for the host name on the snapshots; a deploy never recreates stacktender itself
+  mid-run but after its answer.

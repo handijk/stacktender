@@ -216,6 +216,23 @@ it to `true` once the reports look right. The data directory is `./stacktender-d
 Without a container: `npx stacktender --stack /home/me/stack` on a machine with git and the
 docker CLI.
 
+### A push by hand
+
+When people push to the stack's repository, a `post-receive` hook on that checkout asks
+stacktender to deploy, and relays its lines (the `[deploy] done:` line marks success):
+
+```sh
+#!/bin/bash
+read old new ref
+[ "$ref" = refs/heads/main ] || exit 0
+curl -s --max-time 3600 -X POST http://127.0.0.1:8800/deploy -H 'Content-Type: application/json' \
+  -d "{\"old\":\"$old\",\"new\":\"$new\",\"reason\":\"push\"}" \
+  | python3 -c 'import sys,json; d=json.load(sys.stdin); print("\n".join("[deploy] "+l for l in d["output"].split("\n") if l)); sys.exit(0 if d["ok"] else 1)'
+```
+
+stacktender's own definition in the compose file is never recreated in the middle of a deploy: it
+brings up everything else, answers, and recreates itself a moment later.
+
 ### The API
 
 On `localhost:8800`, JSON, no authentication (bind it to localhost or put it behind something
@@ -269,6 +286,7 @@ backups:
   at: '01:00'
   keepWithin: 14d
   keepWeekly: 8
+  host: stack # the host name on the snapshots; keep an existing repository's
   exclude: [ollama-data, loki-data]
   noStop: [mosquitto]
   data: [.env]
@@ -281,7 +299,12 @@ deploy:
   # command: ./scripts/deploy.sh             # bring your own instead of the shipped one
 notify:
   webhooks: [https://ntfy.sh/your-topic]
-  mqtt: {url: mqtt://localhost, prefix: stacktender} # optional
+  mqtt: # optional: the maintenance signal retained per source on
+    url: mqtt://localhost #   <maintenanceTopic>/<name>-<source>, so a watchdog can hold
+    maintenanceTopic: stacktender/maintenance #   its alerts while planned work runs; events on eventsTopic
+    eventsTopic: stacktender/events
+    stateTopic: stacktender/state
+    name: stacktender
 ```
 
 ## What it does not do
