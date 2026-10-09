@@ -182,4 +182,107 @@ describe('a deploy against fakes', () => {
         );
         assert.ok(bus.ofType('deploy_failed').length === 1);
     });
+
+    test('a build that reproduces the running image ends there: no copy, no recreate', async () => {
+        const stackDir = tempDir('deploy-stack-same');
+        const dataDir = tempDir('deploy-data-same');
+        const compose = 'services:\n  app:\n    build: ./app\n    volumes: ["./app-data:/data"]\n';
+        fs.writeFileSync(path.join(stackDir, 'docker-compose.yaml'), compose);
+        let builtId = 'sha256:one';
+        const docker = {
+            started: [],
+            async containers(wanted) {
+                return new Map(
+                    wanted
+                        .filter((s) => s === 'app')
+                        .map((s) => [s, {service: s, running: true, image: 'stack-app', imageId: 'sha256:one'}]),
+                );
+            },
+            async container() {
+                return null;
+            },
+            async start(name) {
+                this.started.push(name);
+            },
+        };
+        const jobs = [];
+        const backups = {
+            setsInfo() {
+                return {sets: [], by_service: {app: 'app'}, ready: true};
+            },
+            snapshot(body) {
+                jobs.push(body);
+                return {job: 'snap-1', sets: ['app'], stop: ['app']};
+            },
+            job() {
+                return {done: true, ok: true, stopped: ['app']};
+            },
+        };
+        const repo = {
+            async read() {
+                return compose;
+            },
+            async subject() {
+                return 'a test file';
+            },
+            async exists() {
+                return false;
+            },
+            async isAncestor() {
+                return false;
+            },
+            async changedFiles() {
+                return ['app/test/x.test.js'];
+            },
+            async show() {
+                return compose;
+            },
+        };
+        const dockerCalls = [];
+        const run = async (args) => {
+            dockerCalls.push(args.join(' '));
+            if (args[0] === 'compose' && args.includes('config') && args.includes('--format'))
+                return {
+                    code: 0,
+                    output: JSON.stringify({
+                        name: 'stack',
+                        services: {app: {build: {context: path.join(stackDir, 'app')}}},
+                    }),
+                };
+            if (args[0] === 'image' && args[1] === 'inspect') return {code: 0, output: `${builtId}\n`};
+            return {code: 0, output: ''};
+        };
+        const shellCalls = [];
+        const deploy = new Deploy({
+            stackDir,
+            dataDir,
+            repo,
+            backups,
+            docker,
+            bus: fakeBus(),
+            cfg: {selfService: 'stacktender', test: 'npm test', reload: []},
+            run,
+            shell: async (cmd) => {
+                shellCalls.push(cmd);
+                return {code: 0, output: 'ok\n'};
+            },
+        });
+        const same = await deploy.deploy('aaaaaaaa', 'bbbbbbbb');
+        assert.equal(same.ok, true, same.output);
+        assert.ok(dockerCalls.includes('compose build app'), dockerCalls.join('\n'));
+        assert.deepEqual(shellCalls, ['npm test'], 'the gate runs: the context changed, and a string is a command');
+        assert.match(same.output, /same image after the build: app/);
+        assert.deepEqual(jobs, [], 'no copy');
+        assert.ok(!dockerCalls.some((c) => c.startsWith('compose up')), 'no recreate');
+        assert.equal(fs.readFileSync(path.join(dataDir, 'last-deployed-sha'), 'utf-8'), 'bbbbbbbb');
+
+        // The same change with a build that produces a new image: the copy and the recreate as before.
+        builtId = 'sha256:two';
+        dockerCalls.length = 0;
+        const changed = await deploy.deploy('bbbbbbbb', 'cccccccc');
+        assert.equal(changed.ok, true, changed.output);
+        assert.deepEqual(jobs, [{services: ['app'], tag: 'deploy:cccccccc', start: false}], 'the copy');
+        assert.ok(dockerCalls.includes('compose up -d app'), dockerCalls.join('\n'));
+        assert.deepEqual(docker.started, ['app'], 'what the copy stopped runs again');
+    });
 });

@@ -2,7 +2,7 @@
 FROM public.ecr.aws/docker/library/node:22-alpine
 
 # git for the repository, the docker CLI with compose for the deploy and the runners
-RUN apk add --no-cache git docker-cli docker-cli-compose
+RUN apk add --no-cache git docker-cli docker-cli-compose curl
 
 WORKDIR /app
 COPY package.json package-lock.json ./

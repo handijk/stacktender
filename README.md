@@ -135,14 +135,20 @@ repository once a week. The same path serves the copy before an update, a restor
 
 stacktender ships the deploy, because the promises above are made inside it:
 
-1. checkout of the pushed commit, build of the services whose context changed;
-2. the test gate, if the repository has one (`stacktender.test` in the config: a command that must
-   exit 0, or nothing is reloaded or recreated);
+1. checkout of the pushed commit, build of the services whose context changed; a build that
+   reproduces the image the service already runs (a change the Dockerfile does not copy, a test
+   file for instance) ends the deploy there for that service: no copy, no recreate;
+2. the test gate, if the repository has one (`deploy.test` in the config: a command that must
+   exit 0, or nothing is reloaded or recreated), and the reload commands (`deploy.reload`: files
+   applied by a command instead of a rebuild, bind-mounted code with a reload endpoint);
 3. the copy of every set whose service gets a new image, tagged `deploy:<sha>`;
 4. `docker compose up -d` of what changed (everything when the compose file changed);
 5. the last-deployed marker, so a refused deploy is retried from the last one that went through;
 6. a retained maintenance signal on the side channel while all this runs, so your monitoring can
    hold its alerts.
+
+The test gate and the reload commands run inside the stacktender container: `sh` with git, the
+docker CLI, curl, wget and node, on the host's network when the service has `network_mode: host`.
 
 It is a shell script in the repository, invoked by a git hook on the checkout stacktender
 deploys from. If you already have a deploy, keep yours and point stacktender's `deploy.command`
@@ -295,8 +301,13 @@ host:
 scanner:
   image: renovate/renovate:44
 deploy:
-  test: 'docker compose run --rm tests' # optional gate
-  # command: ./scripts/deploy.sh             # bring your own instead of the shipped one
+  test: # optional gate: must exit 0, or nothing is reloaded or recreated
+    command: docker compose run --rm tests
+    paths: [app/] # only when a change touches these; every build or reload when absent
+  reload: # files applied by a command instead of a rebuild
+    - paths: [app/automations/]
+      command: curl -sS -X POST http://localhost:3000/admin/reload
+  # command: ./scripts/deploy.sh # bring your own instead of the shipped one
 notify:
   webhooks: [https://ntfy.sh/your-topic]
   mqtt: # optional: the maintenance signal retained per source on
