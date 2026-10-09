@@ -1,0 +1,54 @@
+{
+  "name": "stacktender",
+  "version": "0.0.1",
+  "description": "Keeps a Docker Compose stack current without breaking it: updates with verification and rollback, and the copy from before every change",
+  "type": "module",
+  "main": "index.js",
+  "bin": {
+    "stacktender": "index.js"
+  },
+  "files": [
+    "index.js",
+    "lib/",
+    "deploy/"
+  ],
+  "engines": {
+    "node": "^20.19 || ^22.12 || >=24"
+  },
+  "scripts": {
+    "lint": "eslint . && prettier --check .",
+    "format": "prettier --write . && eslint --fix .",
+    "test": "node --test"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/handijk/stacktender.git"
+  },
+  "keywords": [
+    "docker",
+    "docker-compose",
+    "updates",
+    "rollback",
+    "backup",
+    "restic",
+    "renovate",
+    "gitops",
+    "self-hosted"
+  ],
+  "author": "Han Dijk",
+  "license": "MIT",
+  "bugs": {
+    "url": "https://github.com/handijk/stacktender/issues"
+  },
+  "homepage": "https://github.com/handijk/stacktender",
+  "dependencies": {
+    "yaml": "^2.8.0"
+  },
+  "devDependencies": {
+    "@eslint/js": "^9.0.0",
+    "eslint": "^9.0.0",
+    "eslint-config-prettier": "^10.0.0",
+    "globals": "^16.0.0",
+    "prettier": "^3.0.0"
+  }
+}

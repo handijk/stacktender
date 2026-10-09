@@ -1,0 +1,53 @@
+{
+  "problems": [],
+  "repositories": {
+    "local": {
+      "packageFiles": {
+        "docker-compose": [
+          {
+            "packageFile": "docker-compose.yaml",
+            "deps": [
+              {
+                "depName": "caddy",
+                "packageName": "caddy",
+                "currentValue": "2.11.6-alpine",
+                "currentDigest": "sha256:d44355d3c2149dc580ce2cac735955d1c08d3d00882c30489c241aa51a5c10d9",
+                "replaceString": "caddy:2.11.6-alpine@sha256:d44355d3c2149dc580ce2cac735955d1c08d3d00882c30489c241aa51a5c10d9",
+                "autoReplaceStringTemplate": "{{depName}}{{#if newValue}}:{{newValue}}{{/if}}{{#if newDigest}}@{{newDigest}}{{/if}}",
+                "datasource": "docker",
+                "updates": [
+                  {
+                    "bucket": "non-major",
+                    "newVersion": "2.11.7",
+                    "newValue": "2.11.7-alpine",
+                    "releaseTimestamp": "2026-10-06T05:52:45.194Z",
+                    "newVersionAgeInDays": 2,
+                    "newMajor": 2,
+                    "newMinor": 11,
+                    "newPatch": 7,
+                    "updateType": "patch",
+                    "isBreaking": false,
+                    "newDigest": "sha256:d8542f48d34a9cf4e4c11a478865229840e87e4c96ea3f439101f31a5d35f75f",
+                    "libYears": 0.0037670633244545914,
+                    "branchName": "renovate/caddy-2.x"
+                  }
+                ],
+                "versioning": "docker",
+                "warnings": [],
+                "sourceUrl": "https://github.com/caddyserver/caddy-docker",
+                "registryUrl": "https://index.docker.io",
+                "homepage": "https://hub.docker.com/_/caddy",
+                "lookupName": "library/caddy",
+                "currentVersion": "2.11.6",
+                "currentVersionTimestamp": "2026-10-04T20:52:47.085Z",
+                "currentVersionAgeInDays": 3,
+                "isSingleVersion": true,
+                "fixedVersion": "2.11.6-alpine"
+              }
+            ]
+          }
+        ]
+      }
+    }
+  }
+}
