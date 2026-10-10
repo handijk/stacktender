@@ -151,7 +151,7 @@ describe('a deploy against fakes', () => {
             'the copy before the image change',
         );
         assert.ok(
-            dockerCalls.includes('compose up -d app db'),
+            dockerCalls.includes('compose up -d --remove-orphans app db'),
             `everything but stacktender itself, since the compose file changed: ${dockerCalls.filter((c) => c.startsWith('compose up'))}`,
         );
         assert.ok(!result.output.includes('recreated once'), "stacktender's own definition did not change");
@@ -355,7 +355,7 @@ describe('a deploy against fakes', () => {
         const result = await deploy.deploy('aaaaaaaa', 'bbbbbbbb');
         assert.equal(result.ok, true, result.output);
         assert.match(result.output, /recreated once this deploy has answered/);
-        assert.ok(dockerCalls.includes('compose up -d web'), 'everything but itself, right away');
+        assert.ok(dockerCalls.includes('compose up -d --remove-orphans web'), 'everything but itself, right away');
         assert.ok(!dockerCalls.some((c) => c.includes('--no-deps')), 'not itself before the answer');
         await new Promise((res) => setTimeout(res, 60));
         const helper = dockerCalls.find((c) => c.startsWith('run -d --rm --name stacktender-recreate-'));
@@ -366,5 +366,146 @@ describe('a deploy against fakes', () => {
             ),
             helper,
         );
+    });
+
+    test('a change of its configuration file: recreated with --force-recreate after the answer', async () => {
+        const stackDir = tempDir('deploy-stack-config');
+        const dataDir = tempDir('deploy-data-config');
+        const compose = 'services:\n  stacktender:\n    image: ghcr.io/x/stacktender:1\n  web:\n    image: nginx:1\n';
+        fs.writeFileSync(path.join(stackDir, 'docker-compose.yaml'), compose);
+        const docker = {
+            async container(name) {
+                return name === 'stacktender'
+                    ? {running: true, image: 'ghcr.io/x/stacktender:1', imageId: 'sha256:one', restartCount: 0}
+                    : null;
+            },
+            async containers() {
+                return new Map();
+            },
+            async start() {},
+        };
+        const repo = {
+            async read() {
+                return compose;
+            },
+            async subject() {
+                return 'autopilot on';
+            },
+            async exists() {
+                return false;
+            },
+            async isAncestor() {
+                return false;
+            },
+            async changedFiles() {
+                return ['stacktender.yaml'];
+            },
+            async show() {
+                return compose;
+            },
+        };
+        const dockerCalls = [];
+        const run = async (args) => {
+            dockerCalls.push(args.join(' '));
+            if (args[0] === 'compose' && args.includes('config') && args.includes('--format'))
+                return {
+                    code: 0,
+                    output: JSON.stringify({
+                        name: 'stack',
+                        services: {stacktender: {image: 'ghcr.io/x/stacktender:1'}, web: {image: 'nginx:1'}},
+                    }),
+                };
+            return {code: 0, output: ''};
+        };
+        const deploy = new Deploy({
+            stackDir,
+            dataDir,
+            repo,
+            backups: {setsInfo: () => ({sets: [], by_service: {}, ready: true})},
+            docker,
+            bus: fakeBus(),
+            cfg: {selfService: 'stacktender', reload: []},
+            run,
+        });
+        deploy.selfRecreateDelayMs = 10;
+        const result = await deploy.deploy('aaaaaaaa', 'bbbbbbbb');
+        assert.equal(result.ok, true, result.output);
+        assert.match(result.output, /own configuration changed: it is recreated/);
+        assert.ok(!dockerCalls.some((c) => c.startsWith('compose up')), 'nothing else is touched');
+        await new Promise((res) => setTimeout(res, 60));
+        const helper = dockerCalls.find((c) => c.startsWith('run -d --rm --name stacktender-recreate-'));
+        assert.ok(helper, dockerCalls.join('\n'));
+        assert.ok(helper.endsWith('compose up -d --no-deps --force-recreate stacktender'), helper);
+    });
+
+    test('a backup run in progress: the deploy waits for it before it touches a container', async () => {
+        const stackDir = tempDir('deploy-stack-busy');
+        const dataDir = tempDir('deploy-data-busy');
+        const compose = 'services:\n  web:\n    image: nginx:1\n';
+        fs.writeFileSync(path.join(stackDir, 'docker-compose.yaml'), compose.replace('nginx:1', 'nginx:2'));
+        const backups = {
+            current: {kind: 'nightly', id: 'n1'},
+            setsInfo: () => ({sets: [], by_service: {}, ready: true}),
+        };
+        setTimeout(() => {
+            backups.current = null;
+        }, 50);
+        const dockerCalls = [];
+        const run = async (args) => {
+            dockerCalls.push({at: Date.now(), call: args.join(' ')});
+            if (args[0] === 'compose' && args.includes('config') && args.includes('--format'))
+                return {
+                    code: 0,
+                    output: JSON.stringify({
+                        name: 'stack',
+                        services: {web: {image: args.includes('-f') ? 'nginx:1' : 'nginx:2'}},
+                    }),
+                };
+            return {code: 0, output: ''};
+        };
+        const deploy = new Deploy({
+            stackDir,
+            dataDir,
+            repo: {
+                async read() {
+                    return compose.replace('nginx:1', 'nginx:2');
+                },
+                async subject() {
+                    return 'nginx 2';
+                },
+                async exists() {
+                    return false;
+                },
+                async isAncestor() {
+                    return false;
+                },
+                async changedFiles() {
+                    return ['docker-compose.yaml'];
+                },
+                async show() {
+                    return compose;
+                },
+            },
+            backups,
+            docker: {
+                async container() {
+                    return null;
+                },
+                async containers() {
+                    return new Map();
+                },
+                async start() {},
+            },
+            bus: fakeBus(),
+            cfg: {selfService: 'stacktender', reload: []},
+            run,
+        });
+        deploy.backupsWaitMs = 10;
+        const started = Date.now();
+        const result = await deploy.deploy('aaaaaaaa', 'bbbbbbbb');
+        assert.equal(result.ok, true, result.output);
+        assert.match(result.output, /a backup run is in progress \(nightly\); waiting for it/);
+        const up = dockerCalls.find((c) => c.call.startsWith('compose up'));
+        assert.ok(up && up.at - started >= 50, 'compose up went before the backup run ended');
     });
 });

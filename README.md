@@ -142,7 +142,9 @@ stacktender ships the deploy, because the promises above are made inside it:
    exit 0, or nothing is reloaded or recreated), and the reload commands (`deploy.reload`: files
    applied by a command instead of a rebuild, bind-mounted code with a reload endpoint);
 3. the copy of every set whose service gets a new image, tagged `deploy:<sha>`;
-4. `docker compose up -d` of what changed (everything when the compose file changed);
+4. `docker compose up -d` of what changed (everything when the compose file changed, and the
+   containers of services no longer in it are removed); a backup run in progress is waited for
+   first;
 5. the last-deployed marker, so a refused deploy is retried from the last one that went through;
 6. a retained maintenance signal on the side channel while all this runs, so your monitoring can
    hold its alerts.
@@ -247,7 +249,8 @@ stacktender's own definition in the compose file is never recreated in the middl
 brings up everything else, answers, and a moment later starts a helper container (its own image's
 docker CLI, with the socket and the stack directory mounted) that recreates it; a compose started
 inside the container it recreates would die with it half way. The socket must sit at the same path
-on the host as in the container (`/var/run/docker.sock`, as in the install above).
+on the host as in the container (`/var/run/docker.sock`, as in the install above). A change of `stacktender.yaml` goes the same way:
+stacktender reads it at its start, so it is recreated after the answer.
 
 ### The API
 
