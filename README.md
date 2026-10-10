@@ -345,9 +345,20 @@ notify:
 
 ## Roadmap
 
-- 0.1: the loop for images and digests, the deploy, the copies, webhooks, the HTTP API.
-- 0.2: lockfile refreshes for services built from the repository, the hooks, MQTT.
-- 0.3: named volumes; a proposal UI by someone who likes UIs.
+Shipped in the 0.0.x pre-releases (October 2026): the loop for images and digests with the health
+watch and the rollback, the deploy, the copies before an image change and the nightly run, the
+hooks (assessor and veto), webhooks and MQTT, the HTTP API, the host report, the weekly sweep.
+
+- 0.1.0, the first release: an arm64 image next to amd64 ([#3](https://github.com/handijk/stacktender/issues/3)),
+  and a decision on where this stands next to Komodo, Watchtower and WUD
+  ([#6](https://github.com/handijk/stacktender/issues/6)).
+- 0.2: lockfile refreshes through a hook, for services built from the repository
+  ([#2](https://github.com/handijk/stacktender/issues/2)); a report of the containers of other
+  compose projects on the host ([#1](https://github.com/handijk/stacktender/issues/1)).
+- 0.3: named volumes ([#4](https://github.com/handijk/stacktender/issues/4)); a proposal UI by
+  someone who likes UIs ([#5](https://github.com/handijk/stacktender/issues/5)).
+
+Open items are GitHub issues on this repository; nothing else keeps the list.
 
 ## License
 
