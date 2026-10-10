@@ -179,10 +179,17 @@ moves again.
 Two optional HTTP endpoints let your own judgement into the loop. Both are plain POST with JSON,
 answered within a timeout; a hook that does not answer counts as "no opinion".
 
-| hook       | when                                     | request                                                                  | answer                                                                 |
-| ---------- | ---------------------------------------- | ------------------------------------------------------------------------ | ---------------------------------------------------------------------- |
-| `assessor` | before a minor or major step is proposed | `{name, from, to, updateType, services, files, sourceUrl, composeEntry}` | `{verdict: "clean" \| "needs a person" \| "needs a code change", why}` |
-| `veto`     | at the end of the soak, before "applied" | `{name, from, to, services, sha}`                                        | `{ok: true}` or `{ok: false, why}`                                     |
+| hook       | when                                     | request                                                                   | answer                                                                              |
+| ---------- | ---------------------------------------- | ------------------------------------------------------------------------- | ----------------------------------------------------------------------------------- |
+| `assessor` | before a minor or major step is proposed | `{id, kind, name, from, to, updateType, services, files, sourceUrl, why}` | `{verdict: "clean" \| "needs a person" \| "needs a code change" \| "pending", why}` |
+| `veto`     | at the end of the soak, before "applied" | `{name, from, to, services, sha}`                                         | `{ok: true}` or `{ok: false, why}`                                                  |
+
+With an assessor, no minor goes by its age alone: every minor and major step is read first, one at
+a time, and a proposal waits for the verdict, which it then carries. A minor found `clean` on a
+service that keeps no data (`assessorAskAnyway` lists the exceptions) is applied like a patch. A
+reader that takes longer than the timeout answers `pending`: it is asked again every five minutes
+for a day, and starts its reading on the first call. A hook that cannot be reached is tried again
+after an hour.
 
 stacktender ships no assessor. The stack this comes from answers with a coding agent that reads
 the release notes; a script that greps a changelog for "breaking" is a valid one too.
