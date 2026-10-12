@@ -2,6 +2,12 @@
 
 ## 0.1.0 (unreleased)
 
+### Fixed
+
+- stacktender's own recreate after a change of its definition or configuration starts its delay when the
+  deploy has finished, not when the compose step did: a deploy with a long reload was killed before its
+  answer (0.0.14).
+
 ### Added
 
 - The loop for images and digests: findings and policy from a Renovate scan, silent applies one at

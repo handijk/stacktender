@@ -438,6 +438,81 @@ describe('a deploy against fakes', () => {
         assert.ok(helper.endsWith('compose up -d --no-deps --force-recreate stacktender'), helper);
     });
 
+    test('a slow reload does not bring its own recreate forward: the helper starts after the answer', async () => {
+        const stackDir = tempDir('deploy-stack-slow');
+        const dataDir = tempDir('deploy-data-slow');
+        const compose = 'services:\n  stacktender:\n    image: ghcr.io/x/stacktender:1\n  web:\n    image: nginx:1\n';
+        fs.writeFileSync(path.join(stackDir, 'docker-compose.yaml'), compose);
+        const docker = {
+            async container(name) {
+                return name === 'stacktender'
+                    ? {running: true, image: 'ghcr.io/x/stacktender:1', imageId: 'sha256:one', restartCount: 0}
+                    : null;
+            },
+            async containers() {
+                return new Map();
+            },
+            async start() {},
+        };
+        const repo = {
+            async read() {
+                return compose;
+            },
+            async subject() {
+                return 'config and an automation';
+            },
+            async exists() {
+                return false;
+            },
+            async isAncestor() {
+                return false;
+            },
+            async changedFiles() {
+                return ['stacktender.yaml', 'statebridge/automations/a.ts'];
+            },
+            async show() {
+                return compose;
+            },
+        };
+        const dockerCalls = [];
+        const run = async (args) => {
+            dockerCalls.push(args.join(' '));
+            if (args[0] === 'compose' && args.includes('config') && args.includes('--format'))
+                return {
+                    code: 0,
+                    output: JSON.stringify({
+                        name: 'stack',
+                        services: {stacktender: {image: 'ghcr.io/x/stacktender:1'}, web: {image: 'nginx:1'}},
+                    }),
+                };
+            return {code: 0, output: ''};
+        };
+        const deploy = new Deploy({
+            stackDir,
+            dataDir,
+            repo,
+            backups: {setsInfo: () => ({sets: [], by_service: {}, ready: true})},
+            docker,
+            bus: fakeBus(),
+            cfg: {selfService: 'stacktender', reload: [{paths: ['statebridge/automations/'], command: 'reload'}]},
+            run,
+            // The reload outlasts the recreate delay by far.
+            shell: async () => {
+                await new Promise((res) => setTimeout(res, 50));
+                return {code: 0, output: ''};
+            },
+        });
+        deploy.selfRecreateDelayMs = 10;
+        const result = await deploy.deploy('aaaaaaaa', 'bbbbbbbb');
+        assert.equal(result.ok, true, result.output);
+        assert.match(result.output, /reload: reload/);
+        assert.ok(!dockerCalls.some((c) => c.includes('stacktender-recreate-')), 'not before the answer');
+        await new Promise((res) => setTimeout(res, 60));
+        const helper = dockerCalls.find((c) => c.startsWith('run -d --rm --name stacktender-recreate-'));
+        assert.ok(helper, dockerCalls.join('\n'));
+        assert.ok(helper.endsWith('compose up -d --no-deps --force-recreate stacktender'), helper);
+    });
+
     test('reload after the compose up, retried while the recreated service starts', async () => {
         const stackDir = tempDir('deploy-stack-reload');
         const dataDir = tempDir('deploy-data-reload');
