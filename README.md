@@ -139,14 +139,16 @@ stacktender ships the deploy, because the promises above are made inside it:
    reproduces the image the service already runs (a change the Dockerfile does not copy, a test
    file for instance) ends the deploy there for that service: no copy, no recreate;
 2. the test gate, if the repository has one (`deploy.test` in the config: a command that must
-   exit 0, or nothing is reloaded or recreated), and the reload commands (`deploy.reload`: files
-   applied by a command instead of a rebuild, bind-mounted code with a reload endpoint);
+   exit 0, or nothing is reloaded or recreated);
 3. the copy of every set whose service gets a new image, tagged `deploy:<sha>`;
 4. `docker compose up -d` of what changed (everything when the compose file changed, and the
    containers of services no longer in it are removed); a backup run in progress is waited for
    first;
-5. the last-deployed marker, so a refused deploy is retried from the last one that went through;
-6. a retained maintenance signal on the side channel while all this runs, so your monitoring can
+5. the reload commands (`deploy.reload`: files applied by a command instead of a rebuild,
+   bind-mounted code with a reload endpoint), after the up, so new code never runs in a container
+   that lacks what the same push brought; tried a few times while a recreated service starts;
+6. the last-deployed marker, so a refused deploy is retried from the last one that went through;
+7. a retained maintenance signal on the side channel while all this runs, so your monitoring can
    hold its alerts.
 
 The test gate and the reload commands run inside the stacktender container: `sh` with git, the

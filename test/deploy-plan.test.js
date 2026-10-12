@@ -438,6 +438,77 @@ describe('a deploy against fakes', () => {
         assert.ok(helper.endsWith('compose up -d --no-deps --force-recreate stacktender'), helper);
     });
 
+    test('reload after the compose up, retried while the recreated service starts', async () => {
+        const stackDir = tempDir('deploy-stack-reload');
+        const dataDir = tempDir('deploy-data-reload');
+        const compose = 'services:\n  app:\n    image: app:1\n';
+        fs.writeFileSync(path.join(stackDir, 'docker-compose.yaml'), compose.replace('app:1', 'app:2'));
+        const order = [];
+        let reloads = 0;
+        const deploy = new Deploy({
+            stackDir,
+            dataDir,
+            repo: {
+                async read() {
+                    return compose.replace('app:1', 'app:2');
+                },
+                async subject() {
+                    return 'a mount and code';
+                },
+                async exists() {
+                    return false;
+                },
+                async isAncestor() {
+                    return false;
+                },
+                async changedFiles() {
+                    return ['docker-compose.yaml', 'app/automations/x.ts'];
+                },
+                async show() {
+                    return compose;
+                },
+            },
+            backups: {setsInfo: () => ({sets: [], by_service: {}, ready: true})},
+            docker: {
+                async container() {
+                    return null;
+                },
+                async containers() {
+                    return new Map();
+                },
+                async start() {},
+            },
+            bus: fakeBus(),
+            cfg: {selfService: 'stacktender', reload: [{paths: ['app/automations/'], command: 'reload app'}]},
+            run: async (args) => {
+                if (args[0] === 'compose' && args.includes('up')) order.push('up');
+                if (args[0] === 'compose' && args.includes('config') && args.includes('--format'))
+                    return {
+                        code: 0,
+                        output: JSON.stringify({
+                            name: 'stack',
+                            services: {app: {image: args.includes('-f') ? 'app:1' : 'app:2'}},
+                        }),
+                    };
+                return {code: 0, output: ''};
+            },
+            shell: async (cmd) => {
+                order.push(cmd);
+                reloads++;
+                return reloads < 3 ? {code: 1, output: 'connection refused'} : {code: 0, output: '{}'};
+            },
+        });
+        deploy.reloadRetryMs = 1;
+        const result = await deploy.deploy('aaaaaaaa', 'bbbbbbbb');
+        assert.equal(result.ok, true, result.output);
+        assert.deepEqual(
+            order,
+            ['up', 'reload app', 'reload app', 'reload app'],
+            'up first, then the reload until it answers',
+        );
+        assert.ok(!result.output.includes('reload failed'), result.output);
+    });
+
     test('a backup run in progress: the deploy waits for it before it touches a container', async () => {
         const stackDir = tempDir('deploy-stack-busy');
         const dataDir = tempDir('deploy-data-busy');
