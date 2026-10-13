@@ -10,6 +10,8 @@
 
 ### Added
 
+- stacktender on npm, published by the release workflow with provenance: `npx stacktender --stack <dir>`
+  runs it without a container, as the install section said (0.0.15).
 - The loop for images and digests: findings and policy from a Renovate scan, silent applies one at
   a time inside the window, verification with a soak, rollback with the copy from before, resume
   after a restart, undo by record or by commit, proposals and dismissals.
